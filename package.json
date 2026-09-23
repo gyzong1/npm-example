@@ -6,7 +6,8 @@
   },
   "dependencies": {
     "send": "^0.16.2",
-    "lodash": "4.17.15"
+    "lodash": "4.17.15",
+    "axios: "1.18.1"
   },
   "devDependencies": {
     "debug": "^4.1.1"
