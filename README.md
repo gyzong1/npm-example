@@ -1,80 +1,74 @@
-# NPM Example
+# npm + JFrog CLI GitHub Actions 示例
 
-## Overview
+基于测试项目 [gyzong1/npm-example](https://github.com/gyzong1/npm-example)，用 JFrog CLI 完成：
 
-Artifactory provides full support for managing npm packages and ensures optimal and reliable access to npmjs.org. It also allows aggregating multiple npm registries under a virtual repository Artifactory, which provides access to all your npm packages through a single URL for both upload and download.
+1. **构建并上传**至 Artifactory
+2. **搜集并发布** Build Info
+3. **扫描** Build（Xray）
 
-You may store exhaustive build information in Artifactory by running your npm builds with [JFrog CLI](https://www.jfrog.com/confluence/display/CLI/JFrog+CLI).
-JFrog CLI collects build-info from your build agents and then publishes it to Artifactory. Once published, the build info can be viewed in the Build Browser under Builds.
-For more details on npm build integration using JFrog CLI, please refer to [Building npm Packages](https://www.jfrog.com/confluence/display/CLI/CLI+for+JFrog+Artifactory#CLIforJFrogArtifactory-BuildingNpmPackagesUsingtheNpmClient) in the JFrog CLI User Guide.
+示例工作流文件：`.github/workflows/npm.yml`
 
-## This Example
+## 使用方法
 
-This example demonstrates how to build a npm project using JFrog CLI. The build does the following:
+将 `npm.yml` 复制到目标仓库：
 
-1. Downloads its npm dependencies from Artifactory.
-2. Packs and uploads the built package to Artifactory.
-3. Records and publishes build-info to Artifactory.
-
-# Prerequisite
-
-1. Make sure your local machine has _npm_ version 5.4.0 or above installed and that _npm_ is included in the PATH. To verify this, run `npm -v`.
-2. Make sure your local machine has the latest version of [JFrog CLI](https://jfrog.com/getcli/).
-3. Make sure you're using a non-OSS JFrog Artifactory with version 5.5.2 or above.
-
-# Creating Repositories
-
-Create the following repositories on your Artifactory instance:
-
-1. A remote npm repository. Make sure the repository has *https://registry.npmjs.org* configured as its URL (this is the default when creating the repository).
-2. A local npm repository.
-3. A virtual repository:
-   - Include the remote and local repositories as part of the new virtual repository.
-   - Set the new local repository as the **Default Deployment Repository** of the new virtual repository.
-
-# Running the Example
-
-'cd' to the root project directory.
-
-Configure Artifactory:
-
-```
-jf c add --url=<JFROG_PLATFORM_URL> [credentials flags]
+```text
+.github/workflows/npm.yml
 ```
 
-Configure the npm project and select the virtual repository as the resolution and deployment repository:
+### Github 仓库配置
 
-```
-jf npm-config --repo-resolve=<NPM_RESOLVE_REPO> --repo-deploy=<NPM_DEPLOY_REPO>
-```
 
-Build the project and record the dependencies as part of the build-info:
+| 类型       | 名称                | 说明                                           |
+| -------- | ----------------- | -------------------------------------------- |
+| Variable | `JF_URL`          | JFrog Platform URL，如 `https://acme.jfrog.io` |
+| Secret   | `JF_ACCESS_TOKEN` | 需具备 Deploy / Build Info / Xray Scan 权限       |
 
-```
-jf npm install --build-name my-npm-build --build-number 1
-```
 
-Add environment variables to the build-info.
+### Artifactory 仓库配置
 
-```
-jf rt bce my-npm-build 1
-```
+流水线通过 `NPM_REPO_RESOLVE` / `NPM_REPO_DEPLOY` 指向 npm 仓库（默认使用同一个 virtual）。请先在 Artifactory 中创建以下 npm 类型仓库：
 
-Add git information to the build-info.
 
-```
-jf rt bag my-npm-build 1
-```
+| 类型      | 示例名称                       | 说明                                                               |
+| ------- | -------------------------- | ---------------------------------------------------------------- |
+| Local   | `guoyz-github-npm-local`   | 存放本流水线发布的 npm 包                                                  |
+| Remote  | `guoyz-github-npm-remote`  | 代理 npmjs，URL 为 `https://registry.npmjs.org`                     |
+| Virtual | `guoyz-github-npm-virtual` | 聚合上述 local + remote；**Default Deployment Repository** 指向对应 local |
 
-Pack and publish the npm package to Artifactory, while recording it as an artifact in the build-info:
 
-```
-jf npm publish --build-name my-npm-build --build-number 1
-```
+说明：
 
-Publish the build info to Artifactory:
+流水线中使用了 build-scan, 需将相关仓库和 build 加入 **Xray Indexed Resources**，以便 `jf build-scan` 可扫描依赖与制品。
 
-```
-jf rt bp my-npm-build 1
-```
-# npm-example
+### 可调环境变量
+
+
+| 变量                       | 默认值                        | 说明       |
+| ------------------------ | -------------------------- | -------- |
+| `JFROG_CLI_BUILD_NAME`   | `guoyz-github-npm-example` | Build 名称 |
+| `JFROG_CLI_BUILD_NUMBER` | `${{ github.run_number }}` | Build 编号 |
+| `NPM_REPO_RESOLVE`       | `guoyz-github-npm-virtual` | 解析仓库     |
+| `NPM_REPO_DEPLOY`        | `guoyz-github-npm-virtual` | 部署仓库     |
+
+
+## 核心 JFrog CLI 步骤
+
+
+| 步骤            | 命令                                            |
+| ------------- | --------------------------------------------- |
+| 配置 npm 仓库     | `jf npm-config`                               |
+| 安装依赖并记录       | `jf npm install --build-name/--build-number` |
+| 发布包并记录        | `jf npm publish --build-name/--build-number` |
+| 搜集环境信息        | `jf rt build-collect-env`                     |
+| 搜集 Git 信息     | `jf rt build-add-git`                         |
+| 发布 Build Info | `jf rt build-publish`                         |
+| 扫描 Build      | `jf build-scan`                               |
+
+
+## 参考链接
+
+- [安装 JFrog CLI](https://docs.jfrog.com/integrations/docs/download-and-install-the-jfrog-cli)
+- [JFrog CLI 快速开始](https://docs.jfrog.com/integrations/docs/jfrog-cli-quick-start)
+- [JFrog CLI 文档总览](https://docs.jfrog.com/integrations/docs/jfrog-cli)
+- [jf npm 命令说明](https://docs.jfrog.com/artifactory/docs/npm)
